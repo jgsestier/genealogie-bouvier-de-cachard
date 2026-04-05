@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genealogie de Bouvier de Cachard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;background:#0f0f1e;color:#e0e0e0;height:100vh;overflow:hidden}
+
+/* TOP BAR */
+.topbar{position:fixed;top:0;left:0;right:0;height:60px;background:rgba(16,16,34,0.97);border-bottom:1px solid rgba(123,104,238,0.25);display:flex;align-items:center;padding:0 20px;gap:16px;z-index:1000;backdrop-filter:blur(12px)}
+.logo{font-size:18px;font-weight:300;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(135deg,#e94560,#f5a623);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.search-box{position:relative;flex:0 1 360px}
+.search-box input{width:100%;padding:8px 14px 8px 36px;border:1px solid rgba(123,104,238,0.25);border-radius:8px;background:rgba(255,255,255,0.04);color:#e0e0e0;font-size:13px;transition:all .2s}
+.search-box input:focus{outline:none;border-color:rgba(123,104,238,0.6);background:rgba(255,255,255,0.07);box-shadow:0 0 12px rgba(123,104,238,0.15)}
+.search-box input::placeholder{color:rgba(224,224,224,0.35)}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:rgba(224,224,224,0.35);font-size:14px;pointer-events:none}
+.dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:rgba(16,16,34,0.98);border:1px solid rgba(123,104,238,0.3);border-radius:8px;max-height:320px;overflow-y:auto;display:none;z-index:1001;box-shadow:0 8px 32px rgba(0,0,0,0.6)}
+.dropdown.show{display:block}
+.dropdown-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(123,104,238,0.08);transition:background .15s;display:flex;justify-content:space-between;align-items:center}
+.dropdown-item:hover{background:rgba(123,104,238,0.15)}
+.dropdown-item .name{font-size:13px;color:#e0e0e0}
+.dropdown-item .era-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.stats-bar{display:flex;gap:18px;margin-left:auto;font-size:12px;color:rgba(224,224,224,0.5)}
+.stats-bar span{color:#f5a623;font-weight:600}
+
+/* BREADCRUMB */
+.breadcrumb{position:fixed;top:60px;left:0;right:0;height:32px;background:rgba(16,16,34,0.9);border-bottom:1px solid rgba(123,104,238,0.12);display:flex;align-items:center;padding:0 20px;gap:6px;z-index:999;font-size:11px;color:rgba(224,224,224,0.4);overflow-x:auto;white-space:nowrap}
+.breadcrumb span{cursor:pointer;transition:color .15s}
+.breadcrumb span:hover{color:#f5a623}
+.breadcrumb .sep{color:rgba(123,104,238,0.3);cursor:default}
+
+/* TOOLBAR */
+.toolbar{position:fixed;right:16px;top:110px;display:flex;flex-direction:column;gap:6px;z-index:999}
+.toolbar button{width:38px;height:38px;border:1px solid rgba(123,104,238,0.25);border-radius:8px;background:rgba(16,16,34,0.95);color:#e0e0e0;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;backdrop-filter:blur(8px)}
+.toolbar button:hover{background:rgba(123,104,238,0.2);border-color:rgba(123,104,238,0.5)}
+
+/* TREE AREA */
+.tree-area{position:fixed;top:92px;left:0;right:0;bottom:0}
+.node-bg{fill:rgba(16,16,34,0.9);stroke:rgba(123,104,238,0.2);stroke-width:1;rx:6;cursor:pointer;transition:all .2s}
+.node-bg:hover{stroke:rgba(123,104,238,0.5);fill:rgba(16,16,34,0.95)}
+.node-text{font-size:11px;fill:#e0e0e0;pointer-events:none}
+.node-dates{font-size:9px;fill:rgba(224,224,224,0.45);pointer-events:none}
+.link-path{fill:none;stroke:rgba(123,104,238,0.15);stroke-width:1.5}
+.node-group.search-match .node-bg{filter:drop-shadow(0 0 8px rgba(245,166,35,0.8)) brightness(1.2)}
+.node-group.search-dim{opacity:0.15}
+.link-path.search-dim{opacity:0.05}
+
+/* MINIMAP */
+.minimap{position:fixed;bottom:16px;left:16px;width:160px;height:120px;background:rgba(16,16,34,0.95);border:1px solid rgba(123,104,238,0.25);border-radius:8px;z-index:999;overflow:hidden}
+.minimap-viewport{fill:none;stroke:#e94560;stroke-width:1.5;opacity:0.6}
+
+/* LEGEND */
+.legend{position:fixed;bottom:150px;left:16px;display:flex;flex-direction:column;gap:4px;z-index:999;font-size:11px;color:rgba(224,224,224,0.5)}
+.legend-entry{display:flex;align-items:center;gap:6px}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+
+/* SIDEBAR */
+.sidebar{position:fixed;right:-360px;top:92px;bottom:0;width:360px;background:rgba(16,16,34,0.98);border-left:1px solid rgba(123,104,238,0.25);z-index:998;transition:right .3s;overflow-y:auto;padding:20px;backdrop-filter:blur(12px)}
+.sidebar.open{right:0}
+.sidebar-header{margin-bottom:16px;position:relative}
+.close-btn{position:absolute;top:0;right:0;background:none;border:none;color:rgba(224,224,224,0.5);font-size:18px;cursor:pointer}
+.close-btn:hover{color:#e94560}
+.sidebar-name{font-size:18px;font-weight:600;color:#f5a623;padding-right:30px}
+.sidebar-dates{font-size:13px;color:rgba(224,224,224,0.5);margin-top:4px}
+.sidebar-section{margin-bottom:14px}
+.sidebar-section h4{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:rgba(123,104,238,0.6);margin-bottom:6px}
+.sidebar-section p{font-size:13px;line-height:1.5;color:rgba(224,224,224,0.8)}
+.child-link{display:block;padding:6px 10px;margin:3px 0;border-radius:6px;background:rgba(123,104,238,0.08);color:#e0e0e0;font-size:12px;cursor:pointer;transition:background .15s;border:none;text-align:left;width:100%}
+.child-link:hover{background:rgba(123,104,238,0.2)}
+
+@media(max-width:768px){
+  .topbar{padding:0 10px;gap:8px}
+  .logo{font-size:14px}
+  .minimap{width:140px;height:100px}
+  .legend{left:160px;font-size:10px}
+  .stats-bar{display:none}
+  .toolbar button{width:34px;height:34px;font-size:15px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">Bouvier de Cachard</div>
+  <div class="search-box">
+    <span class="search-icon">&#128269;</span>
+    <input type="text" id="searchInput" placeholder="Rechercher un membre de la famille..." autocomplete="off">
+    <div class="dropdown" id="dropdown"></div>
+  </div>
+  <div class="stats-bar">
+    <div><span id="countStat">0</span> personnes</div>
+    <div><span id="genStat">0</span> generations</div>
+  </div>
+</div>
+
+<!-- BREADCRUMB -->
+<div class="breadcrumb" id="breadcrumb"></div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <button onclick="zoomIn()" title="Zoom +">+</button>
+  <button onclick="zoomOut()" title="Zoom -">&minus;</button>
+  <button onclick="fitAll()" title="Vue globale">&#9638;</button>
+  <button onclick="goToRoot()" title="Racine">&#8962;</button>
+  <button onclick="expandAll()" title="Tout ouvrir">&#9660;</button>
+  <button onclick="collapseAll()" title="Tout fermer">&#9654;</button>
+  <button onclick="toggleMinimap()" title="Minimap">&#9635;</button>
+</div>
+
+<!-- TREE AREA -->
+<div class="tree-area" id="treeArea"></div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-entry"><div class="legend-dot" style="background:#e94560"></div>Medieval</div>
+  <div class="legend-entry"><div class="legend-dot" style="background:#f5a623"></div>Renaissance</div>
+  <div class="legend-entry"><div class="legend-dot" style="background:#7b68ee"></div>Classique</div>
+  <div class="legend-entry"><div class="legend-dot" style="background:#00b4d8"></div>Revolution</div>
+  <div class="legend-entry"><div class="legend-dot" style="background:#06d6a0"></div>Moderne</div>
+  <div class="legend-entry"><div class="legend-dot" style="background:#ff6b6b"></div>Contemporain</div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <button class="close-btn" onclick="toggleSidebar()">&#x2715;</button>
+    <div class="sidebar-name" id="sidebarName"></div>
+    <div class="sidebar-dates" id="sidebarDates"></div>
+  </div>
+  <div id="sidebarContent"></div>
+</div>
+
+<script>
+// ==========================================================================
+// CORRECTED UNIFIED GENEALOGY DATA
+// ==========================================================================
+const DATA = {
+  name:"Jean de BOUVIER", b:1340, d:1389,
+  spouse:"",
+  notes:"Seigneur de la maison forte de Bouvier. Rappele dans un arret du parlement du Dauphine rendu en 1491, qualifie de 'Noble homme ecuyer' (Nobilis vir Johannes Boverii Scutifer). Issu d'une noble et ancienne race. Possede en 1376 la maison forte de CURSON.",
+  children:[{
+    name:"Arthaud de BOUVIER", b:1375, d:1424,
+    spouse:"une 'fille de qualite' (ep. 1402)",
+    notes:"Tue a la bataille de Verneuil (17 aout 1424). Teste le 3/8/1419. Convoque a l'arriere ban de la province. Compris au rang des nobles dans une revision des feux de la province du Dauphine au 16e siecle.",
+    children:[
+      {name:"Marguerite de BOUVIER", b:1405, d:1460, spouse:"Jean de SAVOYE", notes:"Ils ont vecu a Chatillon (d'apres jugement du 4/1/1441).", children:[]},
+      {name:"Ponson de BOUVIER", b:1410, d:1476,
+       spouse:"Jeanne de MORVILLIER, fille de Jean seigneur de Morvillier (contrat 12/2/1446)",
+       notes:"Prit part a la bataille d'Anthon en 1430. Notaire. Vivaient a Clerieux en 1458.",
+       children:[
+         {name:"Fortunat de BOUVIER", b:1447, d:1510, spouse:"Louise de BALAM (veuve de Hector de FOREL de BLACONS)", notes:"", children:[
+           {name:"Gille de BOUVIER", b:1470, d:1520, notes:"Sans posterite.", children:[]},
+           {name:"Jacques de BOUVIER", b:1475, d:1540, notes:"Proprietaire du moulin de Soubeyran en 1535.", children:[]},
+           {name:"Fortunat de BOUVIER fils", b:1478, d:1530, notes:"Sans posterite.", children:[
+             {name:"Antoine de BOUVIER", b:1500, d:1560, spouse:"???", notes:"", children:[]},
+             {name:"Charles de BOUVIER", b:1503, d:1560, notes:"Sans posterite.", children:[]}
+           ]}
+         ]},
+         {name:"Antoine Raymond de BOUVIER", b:1450, d:1500, spouse:"Antonie du GARDIN (ep. vers 1470)", notes:"Teste le 3/8/1479.", children:[
+           {name:"Charles de BOUVIER", b:1468, d:1520, notes:"Vit en 1480.", children:[]},
+           {name:"Claude de BOUVIER", b:1470, d:1520, notes:"Sans posterite.", children:[]}
+         ]}
+       ]
+      },
+      {name:"Andre de BOUVIER", b:1415, d:1520, spouse:"Fleurie de BERTRAND d'ALIXAN (ep. 29/10/1475)", notes:"Ecuyer.", children:[]},
+      {name:"Hugues de BOUVIER", b:1420, d:1550,
+       spouse:"1. Jeanne de CORONEL (4/11/1515), 2. Baume d'HOSTUN (27/4/1513)",
+       notes:"Teste le 7/9/1544.",
+       children:[
+         {name:"Raymond de BOUVIER", b:1516, d:1580, notes:"", children:[]},
+         {name:"Mathieu de BOUVIER", b:1518, d:1585, notes:"Sans posterite.", children:[]},
+         {name:"Pierre de BOUVIER", b:1525, d:1580,
+          spouse:"Jeanne de MONTMEYRAND, dame de MIRABEL et de CHABAN (ep. 22/1/1554)",
+          notes:"Capitaine de 100 hommes de pied. Teste le 5/3/1575. Maintenu dans sa noblesse par arret du Parlement de Grenoble le 7/9/1573.",
+          children:[
+            {name:"Francois de BOUVIER de MONTMEYRAN", b:1555, d:1620, notes:"", children:[
+              {name:"Pierre de BOUVIER de MONTMEYRAN", b:1580, d:null, notes:"", children:[]},
+              {name:"Jean de BOUVIER de MONTMEYRAN", b:1582, d:null, notes:"", children:[]},
+              {name:"Imbert de BOUVIER de MONTMEYRAN", b:1585, d:null, notes:"", children:[]},
+              {name:"Cinemonde de BOUVIER de MONTMEYRAN", b:1588, d:null, notes:"", children:[]}
+            ]},
+            {name:"Sebastien de BOUVIER de MONTMEYRAN", b:1557, d:1630, notes:"Receveur de la chapelle, Cornas en 1651.", children:[]},
+            {name:"Marguerite de BOUVIER de MONTMEYRAN", b:1560, d:1673, spouse:"Juste de TOURNON", notes:"", children:[]},
+            {name:"Bonaventure de BOUVIER de MONTMEYRAN", b:1562, d:1620, notes:"Sans posterite.", children:[]}
+          ]
+         },
+         {name:"Pierre Louis de BOUVIER", b:1560, d:1624,
+          spouse:"Claude BRUNIER de LARNAGE et de TAIN (ep. 19/6/1588)",
+          notes:"Seigneur de CHABAN. Capitaine, servit dans l'arriere ban sous HENRI IV dans le Piemont. Teste le 13/7/1620.",
+          children:[
+            {name:"Jean Pierre (I) de BOUVIER de MONTMEYRAN", b:1627, d:1695,
+             spouse:"Catherine TESTE de la MOTTE-FERRAND (ep. ~1657)",
+             notes:"Ne le 14/11/1627 a Chanos-Curson. Capitaine au regiment de Montclar.",
+             children:[
+               {name:"Jean-Pierre (II) de BOUVIER Chevalier de MONTMEYRAN", b:1640, d:1731,
+                spouse:"Marguerite du ROUX de JARTAIE-MONTAUBAN, Dame de CACHARD (ep. 20/9/1672)",
+                notes:"Seigneur de Cornas et de Chanos. Ne a St Peray le 12/12/1640. Capitaine au regiment de Tourette.",
+                children:[
+                  {name:"Reyne de BOUVIER", b:1673, d:1707, notes:"St Peray le 19/1/1707. Tuee d'un coup d'epee par son frere Claude.", children:[]},
+                  {name:"Jean-Pierre de BOUVIER Chevalier de CACHARD", b:1676, d:1745,
+                   notes:"Ne a Boffres le 3/1/1676. Connu sous le nom de Chevalier de CACHARD.",
+                   children:[
+                     {name:"Louis de BOUVIER Seigneur de SERRE", b:1710, d:1761, spouse:"Rose COLON (ep. 3/8/1747)", notes:"Capitaine d'infanterie.", children:[]}
+                   ]},
+                  {name:"Claude de BOUVIER Seigneur du Pilon", b:1678, d:1707,
+                   notes:"Accuse d'avoir tue Claude FAURE de BIGUET et sa soeur Reyne. Incarcere sur ordre du Roi.",
+                   children:[]},
+                  {name:"Denis Francois de CACHARD", b:1713, d:1717, notes:"Ne St Peray 7/4/1713.", children:[]},
+                  {name:"Jacques de BOUVIER de CACHARD", b:1715, d:1716, notes:"Ne St Peray 10/5/1715.", children:[]},
+                  {name:"Madeleine de BOUVIER de JARTAIE", b:1717, d:null, notes:"Nee a St Peray le 21/7/1717.", children:[]},
+                  {name:"Therese-Justine de Bouvier de CACHARD", b:1721, d:null, notes:"Nee St Peray 24/11/1721.", children:[]},
+                  {name:"Francois-Alexis de BOUVIER de CACHARD", b:1725, d:1805,
+                   spouse:"Jeanne Marie Francoise du TREMOLET de la CHEYSSERIE (ep. 14/4/1765 a Champis)",
+                   notes:"Ne St Peray 14/11/1725. Capitaine au regiment de Chaux-Montauban. Blesse 3 fois au siege de Prague en 1744. Prit part aux batailles de LAUFELT, RAUCOUX, FONTENAY et au siege de MAASTRICHT. Decede le 9 mai 1805 a St Peray.",
+                   children:[
+                     {name:"Louis-Francois de BOUVIER de CACHARD", b:1766, d:1794,
+                      notes:"Ne Boffres 5/11/1766. Guillotine a Paris place de la Nation. Enterre au cimetiere de Picpus (n.209).",
+                      children:[]},
+                     {name:"Hercule Ami Christo de BOUVIER de CACHARD", b:1767, d:1847,
+                      spouse:"Julie de BEAUSSANCOURT (ep. 16/1/1803)",
+                      notes:"Depute de l'Ardeche. Recut la decoration du LYS et la Legion d'honneur. Largentiere 25/4/1847.",
+                      children:[
+                        {name:"Hercule Louis Gaston de BOUVIER de CACHARD", b:1807, d:1880,
+                         spouse:"Francoise Madeleine Leonide de TAVENIS (ep. Seurre 28/4/1836)",
+                         notes:"Ne a Boffres le 13/6/1807.",
+                         children:[
+                           {name:"Marie Madeleine Alexia de B. de CACHARD", b:1835, d:1842, spouse:"Gaston de la LOMBARDIERE", notes:"", children:[]},
+                           {name:"Hercule Louis de B. de CACHARD", b:1838, d:1838, notes:"Sans posterite.", children:[]},
+                           {name:"Jeanne Francoise Christine Adelaide de B. de CACHARD", b:1847, d:1899, spouse:"1. Antoine Xavier Fortune PRADELLE, 2. Ernest HEYNOT", notes:"Fille de Hercule Louis Gaston.", children:[
+                             {name:"Cecile PRADELLE", b:null, d:1927, notes:"", children:[]},
+                             {name:"Henri DAUSSIER", b:null, d:1913, notes:"", children:[]}
+                           ]},
+                           {name:"Jeanne Alice de BOUVIER de CACHARD", b:1843, d:1924,
+                            spouse:"Edmond MELOT (ep. 1864)",
+                            notes:"Fille de Hercule Louis Gaston.",
+                            children:[
+                              {name:"Cecile MELOT", b:1869, d:null, spouse:"Joseph ARNOULT (ep. 10/5/1900)", notes:"", children:[
+                                {name:"Jeanne MELOT", b:null, d:null, notes:"", children:[]},
+                                {name:"Adele MELOT", b:1889, d:null, spouse:"1. Edmond ARIGOUD, 2. Gervais CUCHAUT", notes:"", children:[]}
+                              ]},
+                              {name:"Jules MELOT", b:1873, d:null, spouse:"1. Elisabeth LAUG, 2. Jeanne ACHARD", notes:"", children:[
+                                {name:"Andre Charles Edmond MELOT", b:1901, d:1991, notes:"", children:[]},
+                                {name:"Paul DUCOS DE LA HAILLE", b:null, d:null, spouse:"Madeleine COTTE", notes:"Gendre de Jules MELOT.", children:[
+                                  {name:"Suzanne DUCOS DE LA HAILLE", b:1935, d:null, spouse:"Louis Marie FOUQUET", notes:"", children:[
+                                    {name:"Marie Madeleine FOUQUET", b:null, d:null, notes:"", children:[]},
+                                    {name:"Elisabeth FOUQUET", b:null, d:null, notes:"", children:[]},
+                                    {name:"Henry FOUQUET", b:null, d:null, notes:"", children:[]}
+                                  ]},
+                                  {name:"Henri DUCOS DE LA HAILLE", b:null, d:null, notes:"", children:[
+                                    {name:"Michel DUCOS DE LA HAILLE", b:null, d:null, notes:"", children:[]}
+                                  ]},
+                                  {name:"Germaine DUCOS DE LA HAILLE", b:null, d:null, notes:"", children:[
+                                    {name:"Bernard JAMBON", b:null, d:null, notes:"", children:[]}
+                                  ]},
+                                  {name:"Jean DUCOS DE LA HAILLE", b:1905, d:1977, spouse:"Alphee GROUVAIRE", notes:"", children:[
+                                    {name:"Alain DUCOS DE LA HAILLE", b:null, d:null, notes:"", children:[]},
+                                    {name:"Therese DUCOS DE LA HAILLE", b:null, d:null, notes:"", children:[]}
+                                  ]},
+                                  {name:"Louise DUCOS DE LA HAILLE", b:null, d:null, notes:"", children:[
+                                    {name:"Alice BLAIGNAN", b:1932, d:null, spouse:"Lucien THEVENOT", notes:"", children:[
+                                      {name:"Nicole THEVENOT", b:null, d:null, notes:"", children:[]},
+                                      {name:"Monique THEVENOT", b:null, d:null, notes:"", children:[]},
+                                      {name:"Yves THEVENOT", b:null, d:null, notes:"", children:[]},
+                                      {name:"Bertrand THEVENOT", b:null, d:null, notes:"", children:[]},
+                                      {name:"Madeleine THEVENOT", b:null, d:null, notes:"", children:[]},
+                                      {name:"Andre THEVENOT", b:null, d:null, notes:"", children:[]},
+                                      {name:"Vincent THEVENOT", b:null, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Georges SEJOURNET", b:null, d:null, spouse:"[fille Ducos de La Haille]", notes:"", children:[
+                                      {name:"Yves SEJOURNET", b:null, d:null, notes:"", children:[]},
+                                      {name:"Maria SEJOURNET", b:null, d:null, notes:"", children:[]},
+                                      {name:"Georges FARGIER", b:null, d:null, spouse:"[fille SEJOURNET]", notes:"", children:[
+                                        {name:"Christine FARGIER", b:1987, d:null, notes:"", children:[]},
+                                        {name:"Daniel FARGIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Jean-Luc FARGIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Bernard FARGIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Isabelle FARGIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Jean Marc FARGIER", b:null, d:null, notes:"", children:[]}
+                                      ]},
+                                      {name:"[M.] CHARTIER", b:null, d:null, spouse:"[fille SEJOURNET]", notes:"", children:[
+                                        {name:"Jean CHARTIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Francois CHARTIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Michel CHARTIER", b:null, d:null, notes:"", children:[]},
+                                        {name:"Anne CHARTIER", b:null, d:null, notes:"", children:[]}
+                                      ]},
+                                      {name:"Raoul BONNARDOT", b:null, d:null, spouse:"[fille SEJOURNET]", notes:"", children:[]}
+                                    ]}
+                                  ]}
+                                ]}
+                              ]}
+                            ]},
+                           {name:"Francois Regis Humbert de BOUVIER de CACHARD", b:1829, d:1903,
+                            spouse:"N. de DEE (ep. vers 1855)",
+                            notes:"Ne a Dole le 1/1/1829. Recut la Legion d'Honneur. Directeur des Contributions a Oran.",
+                            children:[
+                              {name:"Gustave de BOUVIER de CACHARD", b:1861, d:1932, spouse:"Barbe LAQUSSE (dec. 1901)", notes:"", children:[
+                                {name:"Gustave Regis de BOUVIER de CACHARD", b:1887, d:1934, spouse:"1. Madeleine Fernande DEUVET, 2. Simone VUILLAUME (1929)", notes:"Inspecteur d'assurances. Courbevoie.", children:[
+                                  {name:"Paul Amedee de BOUVIER de CACHARD", b:1913, d:1971, spouse:"Jeanne MARTIN", notes:"", children:[]}
+                                ]},
+                                {name:"Regis de BOUVIER de CACHARD", b:1929, d:2013, spouse:"Marette", notes:"Peintre reconnu, ne a Paris.", children:[]},
+                                {name:"Maurice de BOUVIER de CACHARD", b:1933, d:null, spouse:"Francoise GOUSSET (ep. 19/9/1958)", notes:"", children:[]},
+                                {name:"Paul Amedee Gustave de BOUVIER de CACHARD", b:1911, d:1968, spouse:"Raya SORKINE", notes:"", children:[
+                                  {name:"Fernand Laurent Gustave de B. de CACHARD", b:1913, d:1989, spouse:"1. Odette, 2. Odette LECUYER, 3. Josette NOUVEL", notes:"", children:[]},
+                                  {name:"Alain de BOUVIER de CACHARD", b:1935, d:null, spouse:"1. Anne France, 2. Francoise, 3. Yvonne", notes:"Dit AAYA SORKINE. Artiste Peintre.", children:[
+                                    {name:"Christian de BOUVIER de CACHARD", b:null, d:null, spouse:"Marie Claire", notes:"", children:[
+                                      {name:"Lara de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]},
+                                      {name:"Feiga de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]},
+                                      {name:"Laurence de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]},
+                                      {name:"Karine de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]}
+                                    ]}
+                                  ]},
+                                  {name:"Catherine de BOUVIER de CACHARD", b:null, d:null, spouse:"Jean Claude SENYACAR", notes:"", children:[]},
+                                  {name:"Philippe de BOUVIER de CACHARD", b:1953, d:null, spouse:"1. Chantal PEREZ, 2. Yvonne BONNET", notes:"", children:[
+                                    {name:"Caroline de BOUVIER de CACHARD", b:1979, d:null, spouse:"Laurent THERON", notes:"", children:[
+                                      {name:"Cassie de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Marlene de BOUVIER de CACHARD", b:1985, d:null, notes:"Nee 3/12/1985 Perpignan.", children:[]},
+                                    {name:"Alexis de BOUVIER de CACHARD", b:2001, d:null, notes:"Ne 25/7/2001 Perpignan.", children:[]}
+                                  ]},
+                                  {name:"Laurent de BOUVIER de CACHARD", b:1955, d:null, spouse:"Dominique SANCHEZ", notes:"Artisan a St Denis des Murs.", children:[
+                                    {name:"Pierre de BOUVIER de CACHARD", b:1959, d:null, notes:"Chez MICHELIN a Greenville USA.", children:[]},
+                                    {name:"Francois de BOUVIER de CACHARD", b:1961, d:null, notes:"Nucleaire a Marcoule.", children:[
+                                      {name:"Benoit de BOUVIER de CACHARD", b:1990, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Jean de BOUVIER de CACHARD", b:1962, d:null, spouse:"Carole", notes:"Chez THALES.", children:[
+                                      {name:"Manon de BOUVIER de CACHARD", b:1992, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Jacques de BOUVIER de CACHARD", b:1970, d:null, notes:"Infirmier a Tournon.", children:[]},
+                                    {name:"Marc de BOUVIER de CACHARD", b:1975, d:null, spouse:"Magalie", notes:"Applied Materials.", children:[
+                                      {name:"Sarah de BOUVIER de CACHARD", b:1995, d:null, notes:"", children:[]},
+                                      {name:"Clarisse de BOUVIER de CACHARD", b:1999, d:null, notes:"", children:[]}
+                                    ]}
+                                  ]}
+                                ]}
+                              ]}
+                            ]}
+                         ]}
+                        ]},
+                     {name:"Louis-Francois-Alexis de BOUVIER de CACHARD", b:1769, d:1798,
+                      notes:"Emigre en 1792. Decede d'une longue maladie en 1798.",
+                      children:[]},
+                     {name:"Jean Humbert de BOUVIER de CACHARD de JARTAIE", b:1770, d:1857,
+                      spouse:"Alexandra Fedorovna LEWANSKI (ep. 14/11/1806 a Moscou)",
+                      notes:"Ne Boffres 25/2/1770. Recut la Legion d'honneur. Emigre a Moscou. Decede a Romans le 15/3/1857.",
+                      children:[
+                        {name:"Jeanne Francoise de B. de CACHARD (Fanny)", b:1792, d:null, notes:"Nee Boffres 10/4/1792.", children:[]},
+                        {name:"Louis Francois Alexis de B. de CACHARD de MONTMEYRAN", b:1795, d:1851, spouse:"1. Marie Anne Celeste BOULOGNE-ROUGEMONT (ep. 29/10/1798), 2. Catherine Caroline BOULOGNE-ROUGEMONT (ep. 19/12/1809)", notes:"Ne Boffres 9/9/1795. Lieutenant d'artillerie.", children:[
+                          {name:"Charles Edouard de BOUVIER de CACHARD", b:1815, d:1884,
+                           spouse:"1. Eugenie Eulalie Clemence Amedee GERNO (ep. 12/12/1842 a Basse-Terre, Guadeloupe, dec. 1845), 2. Marie Louise Adele FAURE (nee 1829)",
+                           notes:"Servit dans les colonies (Guadeloupe).",
+                           children:[
+                             {name:"Caroline Clemence Octavie Alice de B. de CACHARD", b:1843, d:1889, spouse:"Charles Hercule SOUBEYRAN de ST PRIX (ep. Lyon 25/1/1883)", notes:"Fille de la 1ere epouse Eugenie Gerno.", children:[]},
+                             {name:"Alexis Charles Florentin de B. de CACHARD", b:1846, d:1918, notes:"", children:[]},
+                             {name:"Caroline Clemence Adele Elisabeth de B. de CACHARD", b:1853, d:null, notes:"Fille de la 2e epouse Marie Louise Adele Faure.", children:[]},
+                             {name:"Charles Edouard Joseph Alexis Hippolyte de B. de CACHARD", b:1855, d:1930,
+                              spouse:"Marie Louise Elvire MARTIN de MORESTEL (ep. 1/9/1887 a Paris 17e, nee a Constantine 1856)",
+                              notes:"Ne a Saint-Peray le 3/5/1855. Decede a Saint-Peray le 29/12/1930. Enterre au chateau de Beauregard.",
+                              children:[
+                                {name:"Gabrielle Caroline de BOUVIER de CACHARD", b:null, d:null, spouse:"Paul RUGGIERI (ne 1881, dec. 1936)", notes:"", children:[
+                                  {name:"Eliane RUGGIERI", b:null, d:null, notes:"", children:[]},
+                                  {name:"Micheline RUGGIERI", b:null, d:null, notes:"", children:[]},
+                                  {name:"Marcel RUGGIERI", b:null, d:null, spouse:"Genevieve DUMONT (ep. avril 1944)", notes:"", children:[
+                                    {name:"Beatrice RUGGIERI", b:null, d:null, notes:"", children:[
+                                      {name:"Frederic GLINEUR", b:null, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Sabine RUGGIERI", b:null, d:null, notes:"", children:[
+                                      {name:"Stephane MASSERON", b:null, d:null, notes:"", children:[]},
+                                      {name:"Valerie MASSERON", b:null, d:null, notes:"", children:[]},
+                                      {name:"Emmanuel MASSERON", b:null, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Sylvie RUGGIERI", b:null, d:null, notes:"", children:[
+                                      {name:"Julien GUILLOT-SESTIER", b:null, d:null, notes:"", children:[]},
+                                      {name:"Camille GUILLOT-SESTIER", b:null, d:null, notes:"", children:[]}
+                                    ]},
+                                    {name:"Philippe RUGGIERI", b:null, d:null, notes:"", children:[
+                                      {name:"Theophile RUGGIERI", b:null, d:null, notes:"", children:[]},
+                                      {name:"Philippine RUGGIERI", b:null, d:null, notes:"", children:[]},
+                                      {name:"Phileas RUGGIERI", b:null, d:null, notes:"", children:[]}
+                                    ]}
+                                  ]}
+                                ]},
+                                {name:"Alice Adele de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]},
+                                {name:"Raoul de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]}
+                              ]},
+                             {name:"Marie Adele Caroline Valentine de B. de CACHARD", b:1856, d:1917, notes:"", children:[]},
+                             {name:"Marie Jeanne Felicite Emilie de B. de CACHARD", b:1862, d:null, notes:"", children:[]},
+                             {name:"Edouard Alexis Hercule Humbert de B. de CACHARD", b:1865, d:null, notes:"", children:[]},
+                             {name:"Gaston Alexis Raoul de B. de CACHARD", b:1867, d:1923, notes:"", children:[]}
+                           ]}
+                        ]}
+                      ]},
+                     {name:"Adelaide de BOUVIER de CACHARD", b:1776, d:1869,
+                      spouse:"Hector SOUBEYRAN de ST PRIX (ep. 6/10/1803 a Boffres)",
+                      notes:"Nee Boffres 24/10/1776. St Peray 3/5/1869.",
+                      children:[
+                        {name:"Rose de BOUVIER de CACHARD", b:1797, d:null, notes:"Nee Boffres 18/11/1797.", children:[]},
+                        {name:"Placide de BOUVIER de CACHARD", b:1798, d:1831, notes:"Ne Boffres 22/4/1798.", children:[]}
+                      ]}
+                   ]},
+                  {name:"Lucienne de BOUVIER de CACHARD", b:1880, d:null,
+                   spouse:"Rene FERABEIN",
+                   notes:"",
+                   children:[
+                     {name:"Raoul FERABEIN", b:1920, d:null, notes:"El Biar.", children:[
+                       {name:"Serge DAMON", b:null, d:null, notes:"", children:[]}
+                     ]},
+                     {name:"Michelle de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]},
+                     {name:"Anne-Catherine de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[
+                       {name:"Brigitte de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]},
+                       {name:"Martine de BOUVIER de CACHARD", b:null, d:null, notes:"", children:[]}
+                     ]}
+                   ]}
+                ]
+               }
+             ]}
+          ]}
+        ]
+       },
+       {name:"Claude de BOUVIER", b:1490, d:1555,
+        spouse:"Flory d'ARCES, dame de CHABERT (ep. 1512)",
+        notes:"Souche des BOUVIER de CHIBERT.",
+        children:[
+          {name:"Francois de BOUVIER", b:null, d:null, notes:"Chanoine de CREST", children:[]},
+          {name:"Emmanuel de BOUVIER", b:null, d:null, notes:"SP", children:[]},
+          {name:"Sebastien de BOUVIER", b:null, d:null, notes:"SP", children:[]},
+          {name:"Jacques de BOUVIER", b:null, d:1597, notes:"SP", children:[]},
+          {name:"Antoinette de BOUVIER", b:null, d:null, notes:"Religieuse au monastere de St Pierre a Vienne", children:[]},
+          {name:"Jean de BOUVIER", b:null, d:null, notes:"Apothicaire a Valence en 1544", children:[]}
+        ]},
+       {name:"Claude de BOUVIER de CURSON", b:1639, d:1694, notes:"Cure de Cornas en 1667.", children:[]},
+       {name:"Francoise de BOUVIER", b:1645, d:null, spouse:"Pierre Fournier Sgr de CONFLANS (ep. 4/1/1672)", notes:"", children:[]},
+       {name:"Marguerite de BOUVIER", b:1635, d:1731, spouse:"Pierre Chabalet (ep. 15/2/1659)", notes:"", children:[]},
+       {name:"Jean de BOUVIER de MONTMEYRAN Baron de DURTAIL", b:1632, d:1712,
+        spouse:"Gabrielle du MAY (ep. 17/1/1659)",
+        notes:"Capitaine de cavalerie. Tua en duel Mr de la BARGE Seigneur de GLUN. Condamne a mort par contumace puis gracie.",
+        children:[
+          {name:"Francois de BOUVIER Baron de BORTAIL", b:1680, d:1702, notes:"Tue a Valence d'un coup d'epee.", children:[]},
+          {name:"Gabrielle de MONTMEYRAN", b:1668, d:1738, spouse:"Charles de MONTMEYRAN (ep. 15/9/1712)", notes:"", children:[]},
+          {name:"Louise de BOUVIER de MONTMEYRAN", b:1666, d:1735, spouse:"Claude Francois de COSTON (ep. 7/3/1682)", notes:"", children:[]},
+          {name:"Gabrielle de Bouvier de Montmeyran", b:1670, d:1735, notes:"SP", children:[]},
+          {name:"Jean-Pierre de BOUVIER de MONTMEYRAN", b:1668, d:null, notes:"Ne St Peray 9/12/1668.", children:[]},
+          {name:"Claude de BOUVIER de MONTMEYRAN", b:1662, d:1712, spouse:"Francois du CLU de BESSE (contrat 24/9/1699)", notes:"", children:[
+            {name:"Marguerite de BOUVIER", b:1700, d:null, notes:"", children:[]}
+          ]}
+        ]}
+      ]
+    }]
+};
+
+// ==========================================================================
+// D3 TREE VISUALIZATION
+// ==========================================================================
+let svg, g, zoomBehavior, root, treeLay;
+let nodeWidth = 170, nodeHeight = 54;
+let allFlatNodes = [];
+const duration = 400;
+
+function eraColor(year) {
+  if (!year) return '#ff6b6b';
+  if (year < 1500) return '#e94560';
+  if (year < 1650) return '#f5a623';
+  if (year < 1789) return '#7b68ee';
+  if (year < 1870) return '#00b4d8';
+  if (year < 1945) return '#06d6a0';
+  return '#ff6b6b';
+}
+
+function eraColorDark(year) {
+  if (!year) return 'rgba(255,107,107,0.15)';
+  if (year < 1500) return 'rgba(233,69,96,0.18)';
+  if (year < 1650) return 'rgba(245,166,35,0.15)';
+  if (year < 1789) return 'rgba(123,104,238,0.15)';
+  if (year < 1870) return 'rgba(0,180,216,0.15)';
+  if (year < 1945) return 'rgba(6,214,160,0.15)';
+  return 'rgba(255,107,107,0.15)';
+}
+
+function fmtDates(d) {
+  if (d.data.b && d.data.d) return d.data.b + ' - ' + d.data.d;
+  if (d.data.d) return '\u2020' + d.data.d;
+  if (d.data.b) return 'n. ' + d.data.b;
+  return '';
+}
+
+function shortName(name) {
+  if (name.length <= 22) return name;
+  let s = name.replace(/de BOUVIER de CACHARD/g, 'de B. de C.');
+  s = s.replace(/de BOUVIER de MONTMEYRAN/g, 'de B. de M.');
+  s = s.replace(/de BOUVIER/g, 'de B.');
+  s = s.replace(/DUCOS DE LA HAILLE/g, 'D. DE LA H.');
+  if (s.length <= 24) return s;
+  return s.substring(0, 22) + '...';
+}
+
+function init() {
+  const container = document.getElementById('treeArea');
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+  svg = d3.select('#treeArea').append('svg').attr('width', W).attr('height', H);
+  g = svg.append('g').attr('class', 'tree-g');
+  zoomBehavior = d3.zoom().scaleExtent([0.05, 4]).on('zoom', (e) => { g.attr('transform', e.transform); updateMinimap(); });
+  svg.call(zoomBehavior);
+  root = d3.hierarchy(DATA);
+  root.x0 = H / 2;
+  root.y0 = 0;
+  root.descendants().forEach((d) => { if (d.depth > 2 && d.children) { d._children = d.children; d.children = null; } });
+  treeLay = d3.tree().nodeSize([nodeHeight + 8, nodeWidth + 60]);
+  updateTree(root);
+  document.getElementById('countStat').textContent = countAllNodes(DATA);
+  document.getElementById('genStat').textContent = maxDepth(DATA);
+  setTimeout(fitAll, 300);
+  buildFlatIndex(DATA, []);
+  initMinimap();
+}
+
+function countAllNodes(n) { let c = 1; if (n.children) n.children.forEach(ch => c += countAllNodes(ch)); return c; }
+function maxDepth(n, d=1) { if (!n.children || n.children.length === 0) return d; return Math.max(...n.children.map(ch => maxDepth(ch, d+1))); }
+
+function buildFlatIndex(node, path) {
+  allFlatNodes.push({name: node.name, b: node.b, d: node.d, notes: node.notes, spouse: node.spouse, path: [...path, node.name]});
+  if (node.children) node.children.forEach(ch => buildFlatIndex(ch, [...path, node.name]));
+}
+
+// ==========================================================================
+// UPDATE TREE
+// ==========================================================================
+function updateTree(source) {
+  const treeData = treeLay(root);
+  const nodes = treeData.descendants();
+  const links = treeData.links();
+
+  const node = g.selectAll('.node-group').data(nodes, d => d.data.name + (d.data.b || ''));
+
+  const nodeEnter = node.enter().append('g').attr('class', 'node-group')
+    .attr('transform', `translate(${source.y0 || 0},${source.x0 || 0})`)
+    .on('click', (e, d) => { showSidebar(d); if (d.children) { d._children = d.children; d.children = null; } else if (d._children) { d.children = d._children; d._children = null; } updateTree(d); })
+
+  nodeEnter.append('rect').attr('class', 'node-bg').attr('x', -2).attr('y', -nodeHeight/2).attr('width', nodeWidth).attr('height', nodeHeight).attr('fill', d => eraColorDark(d.data.b));
+  nodeEnter.append('rect').attr('x', -2).attr('y', -nodeHeight/2).attr('width', 4).attr('height', nodeHeight).attr('fill', d => eraColor(d.data.b)).attr('rx', 2);
+  nodeEnter.append('text').attr('class', 'node-text').attr('x', 10).attr('y', -4).text(d => shortName(d.data.name));
+  nodeEnter.append('text').attr('class', 'node-dates').attr('x', 10).attr('y', 12).text(d => fmtDates(d));
+  nodeEnter.append('text').attr('x', nodeWidth - 12).attr('y', 4).attr('text-anchor', 'end').attr('fill', 'rgba(123,104,238,0.4)').attr('font-size', '12px').text(d => (d._children || d.children) ? (d._children ? '+' : '-') : '');
+
+  const nodeUpdate = nodeEnter.merge(node);
+  nodeUpdate.transition().duration(duration).attr('transform', d => `translate(${d.y},${d.x})`);
+  nodeUpdate.select('text:last-child').text(d => (d._children || d.children) ? (d._children ? '+' : '-') : '');
+
+  const nodeExit = node.exit().transition().duration(duration).attr('transform', `translate(${source.y},${source.x})`).remove();
+  nodeExit.select('rect').attr('opacity', 0);
+
+  const link = g.selectAll('.link-path').data(links, d => d.target.data.name + (d.target.data.b || ''));
+  const linkEnter = link.enter().insert('path', 'g').attr('class', 'link-path').attr('d', () => { const o = {x: source.x0 || 0, y: source.y0 || 0}; return d3.linkHorizontal().x(d => d.y).y(d => d.x)({source: o, target: o}); });
+  linkEnter.merge(link).transition().duration(duration).attr('d', d => d3.linkHorizontal().x(d => d.y).y(d => d.x)(d));
+  link.exit().transition().duration(duration).attr('d', () => { const o = {x: source.x, y: source.y}; return d3.linkHorizontal().x(d => d.y).y(d => d.x)({source: o, target: o}); }).remove();
+
+  nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+  updateMinimap();
+}
+
+// ==========================================================================
+// NAVIGATION
+// ==========================================================================
+function zoomIn() { svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.3); }
+function zoomOut() { svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7); }
+
+function fitAll() {
+  const nodes = root.descendants();
+  if (nodes.length === 0) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(d => { if (d.x < minX) minX = d.x; if (d.x > maxX) maxX = d.x; if (d.y < minY) minY = d.y; if (d.y > maxY) maxY = d.y; });
+  const container = document.getElementById('treeArea');
+  const W = container.clientWidth, H = container.clientHeight;
+  const treeW = maxY - minY + nodeWidth + 100, treeH = maxX - minX + nodeHeight + 100;
+  const scale = Math.min(W / treeW, H / treeH, 1.5) * 0.9;
+  const tx = W / 2 - ((minY + maxY) / 2 + nodeWidth / 2) * scale;
+  const ty = H / 2 - ((minX + maxX) / 2) * scale;
+  svg.transition().duration(600).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+}
+
+function goToRoot() {
+  const container = document.getElementById('treeArea');
+  const W = container.clientWidth, H = container.clientHeight;
+  svg.transition().duration(600).call(zoomBehavior.transform, d3.zoomIdentity.translate(80, H / 2).scale(0.8));
+  updateBreadcrumb(root);
+}
+
+function expandAll() {
+  function expand(d) { if (d._children) { d.children = d._children; d._children = null; } if (d.children) d.children.forEach(expand); }
+  expand(root);
+  updateTree(root);
+  setTimeout(fitAll, 500);
+}
+
+function collapseAll() {
+  root.descendants().forEach(d => { if (d.depth > 1 && d.children) { d._children = d.children; d.children = null; } });
+  updateTree(root);
+  setTimeout(fitAll, 500);
+}
+
+// ==========================================================================
+// MINIMAP
+// ==========================================================================
+let minimapSvg, minimapG, minimapRect, minimapVisible = true;
+
+function initMinimap() {
+  const mm = document.querySelector('.minimap');
+  minimapSvg = d3.select(mm).append('svg').attr('width', 160).attr('height', 120);
+  minimapG = minimapSvg.append('g');
+  minimapRect = minimapSvg.append('rect').attr('class', 'minimap-viewport');
+  updateMinimap();
+}
+
+function updateMinimap() {
+  if (!minimapSvg || !minimapVisible) return;
+  const nodes = root.descendants();
+  if (nodes.length === 0) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(d => { if (d.x < minX) minX = d.x; if (d.x > maxX) maxX = d.x; if (d.y < minY) minY = d.y; if (d.y > maxY) maxY = d.y; });
+  const pad = 20;
+  const sw = (maxY - minY) + pad * 2 || 1;
+  const sh = (maxX - minX) + pad * 2 || 1;
+  const scale = Math.min(160 / sw, 120 / sh);
+
+  minimapG.selectAll('circle').data(nodes).join('circle')
+    .attr('cx', d => (d.y - minY + pad) * scale).attr('cy', d => (d.x - minX + pad) * scale).attr('r', 1.5).attr('fill', d => eraColor(d.data.b));
+
+  const t = d3.zoomTransform(svg.node());
+  const container = document.getElementById('treeArea');
+  const W = container.clientWidth, H = container.clientHeight;
+  const vx = (-t.x / t.k - minY + pad) * scale;
+  const vy = (-t.y / t.k - minX + pad) * scale;
+  const vw = (W / t.k) * scale;
+  const vh = (H / t.k) * scale;
+  minimapRect.attr('x', vx).attr('y', vy).attr('width', vw).attr('height', vh);
+}
+
+function toggleMinimap() {
+  minimapVisible = !minimapVisible;
+  document.querySelector('.minimap').style.display = minimapVisible ? 'block' : 'none';
+}
+
+// ==========================================================================
+// BREADCRUMB
+// ==========================================================================
+function updateBreadcrumb(d) {
+  const path = [];
+  let cur = d;
+  while (cur) { path.unshift(cur); cur = cur.parent; }
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = path.map((p, i) => {
+    const name = shortName(p.data.name);
+    return (i > 0 ? '<span class="sep">›</span>' : '') + `<span onclick="navigateTo('${p.data.name.replace(/'/g, "\\'")}')">${name}</span>`;
+  }).join('');
+}
+
+function navigateTo(name) {
+  const node = findNodeByName(root, name);
+  if (!node) return;
+  const container = document.getElementById('treeArea');
+  const W = container.clientWidth, H = container.clientHeight;
+  const scale = 1;
+  svg.transition().duration(600).call(zoomBehavior.transform, d3.zoomIdentity.translate(W / 3 - node.y * scale, H / 2 - node.x * scale).scale(scale));
+  updateBreadcrumb(node);
+}
+
+// ==========================================================================
+// SIDEBAR
+// ==========================================================================
+function showSidebar(d) {
+  document.getElementById('sidebarName').textContent = d.data.name;
+  const dates = fmtDates(d);
+  document.getElementById('sidebarDates').textContent = dates;
+  let html = '';
+  if (d.data.spouse) { html += `<div class="sidebar-section"><h4>Conjoint</h4><p>${d.data.spouse}</p></div>`; }
+  if (d.data.notes) { html += `<div class="sidebar-section"><h4>Notes</h4><p>${d.data.notes}</p></div>`; }
+  const allChildren = (d.children || []).concat(d._children || []);
+  if (allChildren.length > 0) {
+    html += '<div class="sidebar-section"><h4>Enfants (' + allChildren.length + ')</h4>';
+    allChildren.forEach(c => {
+      const cd = c.data.b ? ` (${c.data.b})` : '';
+      html += `<button class="child-link" onclick="childNavigate('${c.data.name.replace(/'/g, "\\'")}')">${c.data.name}${cd}</button>`;
+    });
+    html += '</div>';
+  }
+  document.getElementById('sidebarContent').innerHTML = html;
+  document.getElementById('sidebar').classList.add('open');
+  updateBreadcrumb(d);
+}
+
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+function childNavigate(name) {
+  const node = findNodeByName(root, name);
+  if (!node) return;
+  if (node.parent && node.parent._children) { node.parent.children = node.parent._children; node.parent._children = null; updateTree(node.parent); }
+  setTimeout(() => {
+    const container = document.getElementById('treeArea');
+    const W = container.clientWidth, H = container.clientHeight;
+    svg.transition().duration(600).call(zoomBehavior.transform, d3.zoomIdentity.translate(W / 3 - node.y, H / 2 - node.x));
+    showSidebar(node);
+  }, 500);
+}
+
+function findNodeByName(node, name) {
+  if (node.data.name === name) return node;
+  if (node.children) { for (const c of node.children) { const found = findNodeByName(c, name); if (found) return found; } }
+  if (node._children) { for (const c of node._children) { const found = findNodeByName(c, name); if (found) return found; } }
+  return null;
+}
+
+// ==========================================================================
+// SEARCH
+// ==========================================================================
+const searchInput = document.getElementById('searchInput');
+const dropdown = document.getElementById('dropdown');
+
+searchInput.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase().trim();
+  dropdown.classList.remove('show');
+  if (q.length < 2) return;
+  const results = allFlatNodes.filter(n => n.name.toLowerCase().includes(q)).slice(0, 20);
+  if (results.length === 0) { dropdown.innerHTML = '<div style="padding:10px 14px; color:#888;">Aucun resultat</div>'; dropdown.classList.add('show'); return; }
+  dropdown.innerHTML = results.map(n => {
+    const safeName = n.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const dates = n.b ? (n.d ? ` (${n.b}-${n.d})` : ` (n. ${n.b})`) : '';
+    return `<div class="dropdown-item" onclick="searchGoto('${safeName}', ${n.b||0})"><span class="name">${n.name}${dates}</span><span class="era-dot" style="background:${eraColor(n.b)}"></span></div>`;
+  }).join('');
+  dropdown.classList.add('show');
+});
+
+function searchGoto(name, b) {
+  dropdown.classList.remove('show');
+  searchInput.value = '';
+  allFlatNodes = [];
+  buildFlatIndex(DATA, []);
+  const entry = allFlatNodes.find(n => n.name === name && (n.b||0) === b);
+  if (!entry) return;
+  const path = entry.path;
+  let current = root;
+  for (const pname of path.slice(1)) {
+    if (current._children) { current.children = current._children; current._children = null; }
+    if (!current.children) break;
+    const next = current.children.find(c => c.data.name === pname);
+    if (next) current = next; else break;
+  }
+  updateTree(root);
+  setTimeout(() => {
+    const node = findNodeByName(root, name);
+    if (!node) return;
+    g.selectAll('.node-group').classed('search-match', false).classed('search-dim', false);
+    g.selectAll('.link-path').classed('search-dim', false);
+    const ancestors = new Set();
+    let p = node;
+    while (p) { ancestors.add(p); p = p.parent; }
+    g.selectAll('.node-group').classed('search-match', d => d === node).classed('search-dim', d => !ancestors.has(d));
+    g.selectAll('.link-path').classed('search-dim', l => !ancestors.has(l.source) && !ancestors.has(l.target));
+    const scale = 1.2;
+    const container = document.getElementById('treeArea');
+    const W = container.clientWidth, H = container.clientHeight;
+    svg.transition().duration(600).call(zoomBehavior.transform, d3.zoomIdentity.translate(W / 2 - node.y * scale, H / 2 - node.x * scale).scale(scale));
+    showSidebar(node);
+  }, 500);
+}
+
+// ==========================================================================
+// INIT
+// ==========================================================================
+window.addEventListener('load', init);
+window.addEventListener('resize', () => {
+  svg.attr('width', document.getElementById('treeArea').clientWidth)
+     .attr('height', document.getElementById('treeArea').clientHeight);
+});
+</script>
+<!-- MINIMAP -->
+<div class="minimap"></div>
+</body>
+</html>
